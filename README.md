@@ -6,6 +6,7 @@
 **MirrorMetrics** is a scientific benchmarking tool for evaluating **Face LoRAs** (Stable Diffusion fine-tuned models). It uses [InsightFace](https://github.com/deepinsight/insightface) (ArcFace) to perform local biometric analysis and generates a rich, interactive **Plotly** dashboard — all running entirely on your machine.
 
 **In two quick and easy words** 
+
 You put the dataset you used to train your LoRA in the Reference_Images folder and the generated images in the Lora_Candidates folder (Create one folder for each LoRA you want to compare. The name of the folder will be used as the name of the LoRA in the dashboard.). 
 
 You can have more LoRAs from the same training, maybe with different settings, or different steps, for example. Or you could have LoRA trained for entirely different models, that's fine too. 
