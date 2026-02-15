@@ -54,7 +54,7 @@ class FaceAnalyzer:
         return {
             'embedding': face.normed_embedding,
             'age': face.age,
-            'gender': 'M' if face.sex == 1 else 'F',
+
             'pitch': pitch, 'yaw': yaw, 'roll': roll,
             'det_score': face.det_score if hasattr(face, 'det_score') else 0.99,
             'aspect_ratio': aspect_ratio,
@@ -119,7 +119,7 @@ class FaceAnalyzer:
                 'Type': 'Reference', 'Group': 'Reference',
                 'Filename': filename,
                 'Similarity': sim, # This value is now meaningful!
-                'Age': data['age'], 'Gender': data['gender'],
+                'Age': data['age'],
                 'Yaw': data['yaw'], 'Pitch': data['pitch'], 'Roll': data['roll'],
                 'DetScore': data['det_score'],
                 'AspectRatio': data['aspect_ratio'],
@@ -157,7 +157,7 @@ class FaceAnalyzer:
                         'Type': 'Generated', 'Group': lora_name,
                         'Filename': filename,
                         'Similarity': sim,
-                        'Age': data['age'], 'Gender': data['gender'],
+                        'Age': data['age'],
                         'Yaw': data['yaw'], 'Pitch': data['pitch'], 'Roll': data['roll'],
                         'DetScore': data['det_score'],
                         'AspectRatio': data['aspect_ratio'],
@@ -166,7 +166,7 @@ class FaceAnalyzer:
                 else:
                     dataset_data.append({
                         'Type': 'Failed', 'Group': lora_name, 'Filename': filename,
-                        'Similarity': 0, 'Age': 0, 'Gender': 'N/A', 
+                        'Similarity': 0, 'Age': 0,
                         'Yaw': 0, 'Pitch': 0, 'Roll': 0, 'DetScore': 0, 'AspectRatio': 0, 'Embedding': None
                     })
 

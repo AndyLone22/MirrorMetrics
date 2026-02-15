@@ -32,7 +32,7 @@ The way I use it the most at the moment is:
 | 📊 **Interactive Plotly Dashboard** | 7-panel dark-themed HTML dashboard with floating control panel |
 | 🎯 **Pose Analysis** | Yaw / Pitch scatter plots to evaluate identity stability across head orientations |
 | 🗺️ **t-SNE Identity Map** | 2D projection of face embeddings to visualize identity clusters |
-| 👤 **Age & Gender Detection** | Per-image age estimation and gender classification |
+| 👤 **Age Detection** | Per-image age estimation via deep learning |
 | 🔒 **Privacy-Focused** | Everything runs locally — no images are ever uploaded |
 
 ---
