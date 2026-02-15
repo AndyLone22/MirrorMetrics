@@ -100,6 +100,8 @@ MirrorMetrics/
 
 **Windows:** Just double-click `run.bat` — it activates the venv and launches the script automatically.
 
+**Linux / macOS:** Run `chmod +x run.sh` once, then `./run.sh`.
+
 **Or manually from any platform:**
 
 ```bash
