@@ -1,11 +1,22 @@
 # MirrorMetrics - Dependencies
 # ==============================
+
 # Core face analysis
 insightface>=0.7.3
 
-# GPU inference (requires CUDA toolkit installed on your system).
-# If you don't have a CUDA-capable GPU, replace with: onnxruntime
+# GPU inference (requires NVIDIA GPU)
 onnxruntime-gpu
+
+# NVIDIA CUDA libraries (installed locally in the venv, no system-level setup needed)
+nvidia-cublas-cu12
+nvidia-cudnn-cu12
+nvidia-cuda-runtime-cu12
+nvidia-cuda-nvrtc-cu12
+nvidia-cufft-cu12
+nvidia-curand-cu12
+nvidia-cusolver-cu12
+nvidia-cusparse-cu12
+nvidia-nvjitlink-cu12
 
 # Image processing
 opencv-python>=4.7

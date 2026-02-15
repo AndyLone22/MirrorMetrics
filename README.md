@@ -40,12 +40,11 @@ The way I use it the most at the moment is:
 ## 📋 Prerequisites
 
 - **Python 3.10+**
-- **NVIDIA GPU** with CUDA toolkit installed (for `onnxruntime-gpu`)
-  - _If you don't have a CUDA GPU, edit `requirements.txt` and replace `onnxruntime-gpu` with `onnxruntime`, then change the provider in `mirror_metrics.py` to `CPUExecutionProvider`._
+- **NVIDIA GPU** with up-to-date drivers
 
 ---
 
-## � Installation
+## 🚀 Installation
 
 ```bash
 # Clone the repository
@@ -60,6 +59,14 @@ venv\Scripts\activate        # Windows
 # Install dependencies
 pip install -r requirements.txt
 ```
+
+> [!IMPORTANT]
+> The `requirements.txt` includes all NVIDIA CUDA libraries (cuBLAS, cuDNN, etc.) so the setup is **fully standalone** — no system-level CUDA Toolkit installation needed. This makes the total venv size **~4.5 GB**.
+
+> [!TIP]
+> **Already have CUDA 12 installed system-wide?** You can save ~3 GB by removing all `nvidia-*` lines from `requirements.txt` before running `pip install`. The script will use your system CUDA libraries instead.
+>
+> **No NVIDIA GPU?** Replace `onnxruntime-gpu` with `onnxruntime` in `requirements.txt` and remove all `nvidia-*` lines. The script will run on CPU (slower but functional).
 
 > [!NOTE]
 > On the first run, InsightFace will automatically download the `buffalo_l` model (~300 MB). This is a one-time operation.

@@ -1,4 +1,37 @@
 import os
+import sys
+
+# ==========================================
+# CUDA DLL AUTO-DISCOVERY (Windows)
+# ==========================================
+# Automatically locates NVIDIA libraries installed via pip
+# (nvidia-cublas-cu12, nvidia-cudnn-cu12, etc.) so that
+# onnxruntime-gpu can find them without system-level PATH changes.
+if sys.platform == "win32":
+    import importlib.util
+    _nvidia_packages = [
+        "nvidia.cublas",
+        "nvidia.cudnn",
+        "nvidia.cuda_runtime",
+        "nvidia.cuda_nvrtc",
+        "nvidia.cufft",
+        "nvidia.curand",
+        "nvidia.cusolver",
+        "nvidia.cusparse",
+        "nvidia.nccl",
+        "nvidia.nvjitlink",
+    ]
+    for _pkg in _nvidia_packages:
+        _spec = importlib.util.find_spec(_pkg)
+        if _spec and _spec.submodule_search_locations:
+            for _loc in _spec.submodule_search_locations:
+                _bin = os.path.join(_loc, "bin")
+                _lib = os.path.join(_loc, "lib")
+                for _dir in (_bin, _lib):
+                    if os.path.isdir(_dir):
+                        os.add_dll_directory(_dir)
+                        os.environ["PATH"] = _dir + os.pathsep + os.environ.get("PATH", "")
+
 import cv2
 import numpy as np
 import insightface
