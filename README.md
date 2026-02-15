@@ -40,7 +40,7 @@ The way I use it the most at the moment is:
 ## 📋 Prerequisites
 
 - **Python 3.10+**
-- **NVIDIA GPU** with up-to-date drivers
+- **NVIDIA GPU** _(recommended, not required)_ — the script runs on CPU too, just slower. See the installation tips below.
 
 ---
 
