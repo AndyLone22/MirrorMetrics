@@ -98,6 +98,10 @@ MirrorMetrics/
 
 ### 2. Run the analysis
 
+**Windows:** Just double-click `run.bat` — it activates the venv and launches the script automatically.
+
+**Or manually from any platform:**
+
 ```bash
 python mirror_metrics.py
 ```
