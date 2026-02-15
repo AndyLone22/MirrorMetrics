@@ -14,7 +14,7 @@ from plotly.subplots import make_subplots
 from sklearn.manifold import TSNE
 
 # ==========================================
-# ### CONFIGURAZIONE DASHBOARD ###
+# ### DASHBOARD CONFIGURATION ###
 # ==========================================
 
 PATH_REFERENCE = r"Reference_Images"
@@ -26,16 +26,16 @@ OUTPUT_HTML = f"Dashboard_{TIMESTAMP}.html"
 OUTPUT_CSV = f"Data_{TIMESTAMP}.csv"
 
 # ==========================================
-# FINE CONFIGURAZIONE
+# END CONFIGURATION
 # ==========================================
 
 class FaceAnalyzer:
     def __init__(self):
-        print(">>> Inizializzazione InsightFace (GPU)...")
-        # Usa ['CPUExecutionProvider'] se non hai CUDA configurato perfettamente
+        print(">>> Initializing InsightFace (GPU)...")
+        # Use ['CPUExecutionProvider'] if you don't have CUDA properly configured
         self.app = FaceAnalysis(name='buffalo_l', providers=['CUDAExecutionProvider'])
         self.app.prepare(ctx_id=0, det_size=(640, 640))
-        print(">>> Sistema pronto.")
+        print(">>> System ready.")
 
     def analyze_image(self, img_path):
         img = cv2.imread(img_path)
@@ -64,8 +64,8 @@ class FaceAnalyzer:
     def process_dataset(self):
         dataset_data = [] 
         
-        # 1. Processa REFERENCE
-        print(f"\n--- Analisi Reference: {PATH_REFERENCE} ---")
+        # 1. Process REFERENCE images
+        print(f"\n--- Analyzing Reference: {PATH_REFERENCE} ---")
         if not os.path.isdir(PATH_REFERENCE):
             raise FileNotFoundError(
                 f"Reference folder '{PATH_REFERENCE}' not found. "
@@ -75,7 +75,7 @@ class FaceAnalyzer:
         for ext in EXTENSIONS:
             ref_files.extend(glob.glob(os.path.join(PATH_REFERENCE, ext)))
             
-        # PRIMA PASSATA: Estrai tutti gli embedding e i dati
+        # FIRST PASS: Extract all embeddings and data
         ref_results = []
         for f in tqdm(ref_files, desc="Extracting Reference Data"):
             data = self.analyze_image(f)
@@ -86,39 +86,39 @@ class FaceAnalyzer:
                 })
         
         if not ref_results:
-            raise ValueError("Nessun volto trovato nel Reference! Controlla le immagini.")
+            raise ValueError("No faces found in Reference images! Please check your images.")
 
-        # Crea una matrice numpy con tutti gli embedding reference
+        # Build a numpy matrix with all reference embeddings
         ref_embeddings_matrix = np.stack([r['data']['embedding'] for r in ref_results])
         
-        # SECONDA PASSATA: Calcola Similarità con tecnica Leave-One-Out (LOO)
+        # SECOND PASS: Compute similarity using Leave-One-Out (LOO)
         n_refs = len(ref_results)
         
-        print(">>> Calcolo similarità Reference (Leave-One-Out)...")
+        print(">>> Computing Reference similarity (Leave-One-Out)...")
         for i, r in enumerate(ref_results):
             data = r['data']
             filename = os.path.basename(r['file'])
             
-            # Calcola il centroide escludendo l'immagine corrente
+            # Compute centroid excluding the current image
             if n_refs > 1:
-                # Maschera per selezionare tutti gli indici tranne i
+                # Mask to select all indices except i
                 mask = np.arange(n_refs) != i
                 other_embeddings = ref_embeddings_matrix[mask]
                 
-                # Centroide degli "altri"
+                # Centroid of the "others"
                 loo_centroid = np.mean(other_embeddings, axis=0)
                 loo_centroid = loo_centroid / np.linalg.norm(loo_centroid)
                 
-                # Similarità tra l'immagine corrente e il centroide degli altri
+                # Similarity between the current image and the others' centroid
                 sim = float(np.dot(data['embedding'], loo_centroid))
             else:
-                # Se c'è una sola immagine, la similarità è per forza 1.0 (o indefinita)
+                # If there's only one image, similarity is necessarily 1.0 (or undefined)
                 sim = 1.0
 
             dataset_data.append({
                 'Type': 'Reference', 'Group': 'Reference',
                 'Filename': filename,
-                'Similarity': sim, # Ora questo valore è significativo!
+                'Similarity': sim, # This value is now meaningful!
                 'Age': data['age'], 'Gender': data['gender'],
                 'Yaw': data['yaw'], 'Pitch': data['pitch'], 'Roll': data['roll'],
                 'DetScore': data['det_score'],
@@ -126,14 +126,14 @@ class FaceAnalyzer:
                 'Embedding': data['embedding']
             })
 
-        # Calcola il Centroide TOTALE per valutare i candidati (LoRA)
-        # Qui usiamo tutte le reference perché i LoRA sono esterni
+        # Compute the FULL centroid for evaluating LoRA candidates
+        # Here we use all reference images since LoRAs are external
         centroid_full = np.mean(ref_embeddings_matrix, axis=0)
         centroid_full = centroid_full / np.linalg.norm(centroid_full)
 
-        # 2. Processa LORA CANDIDATES
+        # 2. Process LORA CANDIDATES
         if not os.path.exists(PATH_CANDIDATES_ROOT):
-            print(f"ATTENZIONE: Cartella {PATH_CANDIDATES_ROOT} non trovata.")
+            print(f"WARNING: Folder {PATH_CANDIDATES_ROOT} not found.")
             return pd.DataFrame(dataset_data)
 
         subfolders = [f.path for f in os.scandir(PATH_CANDIDATES_ROOT) if f.is_dir()]
@@ -150,7 +150,7 @@ class FaceAnalyzer:
                 filename = os.path.basename(f)
                 
                 if data:
-                    # Per i LoRA usiamo il centroide completo delle reference
+                    # For LoRA candidates we use the full reference centroid
                     sim = float(np.dot(data['embedding'], centroid_full))
                     
                     dataset_data.append({
@@ -173,7 +173,7 @@ class FaceAnalyzer:
         return pd.DataFrame(dataset_data)
 
     def generate_tsne(self, df):
-        print("\n>>> Calcolo t-SNE...")
+        print("\n>>> Computing t-SNE...")
         valid_df = df[df['Embedding'].notnull()].copy()
         if len(valid_df) < 5: return df
         
@@ -186,7 +186,7 @@ class FaceAnalyzer:
         return valid_df
 
     def create_dashboard(self, df):
-        print(f"\n>>> Generazione Dashboard 13.0 (IMAX Layout): {OUTPUT_HTML}")
+        print(f"\n>>> Generating Dashboard (IMAX Layout): {OUTPUT_HTML}")
         clean_df = df[df['Type'] != 'Failed']
         groups = df['Group'].unique()
         colors = px.colors.qualitative.Bold 
@@ -194,12 +194,12 @@ class FaceAnalyzer:
         fig = make_subplots(
             rows=7, cols=1,
             subplot_titles=(
-                "1. Similarità Volto", "2. Distribuzione Età", "3. Face Ratio", 
-                "4. Detection Confidence (Tutti i punti visibili)", 
-                "5. Profile Stability", "6. Pose Variety", "7. Mappa Identità"
+                "1. Face Similarity", "2. Age Distribution", "3. Face Ratio", 
+                "4. Detection Confidence (All points visible)", 
+                "5. Profile Stability", "6. Pose Variety", "7. Identity Map"
             ),
             specs=[[{"type": "xy"}]] * 7,
-            # MODIFICA 1: Riduciamo lo spazio tra i grafici (era 0.06)
+            # Reduced spacing between charts (was 0.06)
             vertical_spacing=0.025 
         )
 
@@ -211,7 +211,7 @@ class FaceAnalyzer:
             subset = clean_df[clean_df['Group'] == group]
             color = get_style(group)
             
-            # RIGA 1: Similarità
+            # ROW 1: Similarity
             fig.add_trace(go.Box(
                 y=subset['Similarity'], name=group, 
                 boxpoints='all', jitter=0.5, pointpos=-1.8,
@@ -220,16 +220,16 @@ class FaceAnalyzer:
                 legendgroup=group, showlegend=False 
             ), row=1, col=1)
 
-            # RIGA 2: Età
+            # ROW 2: Age
             fig.add_trace(go.Violin(
                 y=subset['Age'], name=group, 
                 box_visible=True, meanline_visible=True, points='all',
                 line_color=color, opacity=0.8, marker=dict(size=5),
-                text=subset['Filename'], hovertemplate="<b>%{text}</b><br>Età: %{y:.1f}",
+                text=subset['Filename'], hovertemplate="<b>%{text}</b><br>Age: %{y:.1f}",
                 legendgroup=group, showlegend=False
             ), row=2, col=1)
 
-            # RIGA 3: Ratio
+            # ROW 3: Ratio
             fig.add_trace(go.Violin(
                 y=subset['AspectRatio'], name=group, 
                 box_visible=True, points='all', line_color=color, opacity=0.8,
@@ -237,7 +237,7 @@ class FaceAnalyzer:
                 legendgroup=group, showlegend=False
             ), row=3, col=1)
 
-            # RIGA 4: Confidence
+            # ROW 4: Confidence
             fig.add_trace(go.Box(
                 x=subset['DetScore'], name=group, 
                 boxpoints='all', jitter=0.5, pointpos=-1.8,
@@ -246,33 +246,33 @@ class FaceAnalyzer:
                 orientation='h', legendgroup=group, showlegend=False
             ), row=4, col=1)
 
-            # RIGA 5: Profile
+            # ROW 5: Profile
             fig.add_trace(go.Scatter(
                 x=subset['Yaw'].abs(), y=subset['Similarity'], mode='markers', name=group,
-                marker=dict(size=9, color=color), # Punti leggermente più grandi
+                marker=dict(size=9, color=color), # Slightly larger points
                 text=subset['Filename'], hovertemplate="<b>%{text}</b><br>Yaw: %{x:.1f}°<br>Sim: %{y:.3f}",
                 legendgroup=group, showlegend=False
             ), row=5, col=1)
 
-            # --- RIGA 6: Pose Variety (Bubble Chart 2.0) ---
-            # Qui la dimensione ci dice SE l'identità regge nella posa estrema
-            size_ref_6 = 6 + (subset['Similarity'] ** 4) * 25 # Esagero ancora di più qui
+            # --- ROW 6: Pose Variety (Bubble Chart 2.0) ---
+            # Bubble size indicates whether identity holds under extreme poses
+            size_ref_6 = 6 + (subset['Similarity'] ** 4) * 25 # Amplified scaling
             
             fig.add_trace(go.Scatter(
                 x=subset['Yaw'], y=subset['Pitch'], mode='markers', name=group,
                 marker=dict(
-                    size=size_ref_6, # <--- DIMENSIONE DINAMICA
+                    size=size_ref_6, # <--- DYNAMIC SIZE
                     color=color, 
-                    symbol='circle', # Tolgo il diamond, il cerchio rende meglio le dimensioni
-                    opacity=0.8,     # Leggera trasparenza per vedere sovrapposizioni
+                    symbol='circle', # Circle renders size differences better than diamond
+                    opacity=0.8,     # Slight transparency to reveal overlaps
                     line=dict(width=1, color='rgba(255,255,255,0.3)')
                 ),
                 text=subset['Filename'], 
-                hovertemplate="<b>%{text}</b><br>Yaw: %{x:.1f}<br>Pitch: %{y:.1f}<br>Sim: %{marker.size:.2f}", # Hack per vedere la size nel debug
+                hovertemplate="<b>%{text}</b><br>Yaw: %{x:.1f}<br>Pitch: %{y:.1f}<br>Sim: %{marker.size:.2f}", # Debug hack to inspect size
                 legendgroup=group, showlegend=False
             ), row=6, col=1)
 
-            # RIGA 7: t-SNE
+            # ROW 7: t-SNE
             if 'tsne_x' in subset.columns:
                 fig.add_trace(go.Scatter(
                     x=subset['tsne_x'], y=subset['tsne_y'], mode='markers', name=group,
@@ -284,17 +284,17 @@ class FaceAnalyzer:
         fig.add_hline(y=0.6, line_dash="dash", line_color="#58a6ff", row=1, col=1)
 
         fig.update_layout(
-            title_text=f"🔬 Analisi Biometrica 13.0 (IMAX) - {TIMESTAMP}",
-            # MODIFICA 2: Aumentiamo altezza totale
+            title_text=f"🔬 Biometric Analysis (IMAX) - {TIMESTAMP}",
+            # Increased total height
             height=6000, 
             autosize=True,
             template="plotly_dark",
             paper_bgcolor="#0d1117",
             plot_bgcolor="#161b22",
-            # MODIFICA 3: Font più leggibile sui grafici grandi
+            # More readable font for large charts
             font=dict(color="#e6edf3", size=15),
             showlegend=False, 
-            # MODIFICA 4: Margini ottimizzati
+            # Optimized margins
             margin=dict(r=50, l=60, t=80, b=50) 
         )
         
@@ -303,7 +303,7 @@ class FaceAnalyzer:
         fig.update_yaxes(gridcolor=grid_clr, zerolinecolor=grid_clr)
         
         fig.update_yaxes(title_text="Sim", row=1, col=1)
-        fig.update_yaxes(title_text="Età", row=2, col=1)
+        fig.update_yaxes(title_text="Age", row=2, col=1)
         fig.update_yaxes(title_text="Ratio", row=3, col=1)
         fig.update_xaxes(title_text="Confidence", row=4, col=1)
         fig.update_xaxes(title_text="Yaw", row=5, col=1)
@@ -318,7 +318,7 @@ class FaceAnalyzer:
         self.inject_custom_css(OUTPUT_HTML)
         self.inject_floating_legend(OUTPUT_HTML, clean_df) 
         
-        print(">>> Dashboard completata.")
+        print(">>> Dashboard complete.")
         clean_df.drop(columns=['Embedding', 'img_obj'], errors='ignore').to_csv(OUTPUT_CSV, index=False)
 
     def inject_custom_css(self, html_path):
@@ -335,15 +335,15 @@ class FaceAnalyzer:
             f.write(content)
 
     def inject_floating_legend(self, html_path, df):
-        """Crea il pannello di controllo flottante con JS"""
+        """Create the floating control panel with JS"""
         groups = df['Group'].unique().tolist()
         colors = px.colors.qualitative.Bold
         
-        # Genera HTML per ogni voce della legenda
+        # Generate HTML for each legend entry
         legend_items = ""
         for i, group in enumerate(groups):
             color = colors[i % len(colors)]
-            safe_name = group.replace("'", "\\'") # Escape per JS
+            safe_name = group.replace("'", "\\'") # Escape for JS
             
             legend_items += f"""
             <label class="lg-item" data-group="{safe_name}">
@@ -353,7 +353,7 @@ class FaceAnalyzer:
             </label>
             """
 
-        # Il payload include CSS, HTML del pannello e lo script JS
+        # The payload includes CSS, panel HTML, and the JS script
         payload = f"""
         <style>
             #fl-legend {{
@@ -374,14 +374,14 @@ class FaceAnalyzer:
                 cursor: pointer; border-radius: 4px; transition: background 0.2s;
             }}
             .lg-item:hover {{ background: rgba(255,255,255,0.05); }}
-            .lg-item input {{ display: none; }} /* Nascondi checkbox brutto */
+            .lg-item input {{ display: none; }} /* Hide default checkbox */
             .dot {{
                 width: 12px; height: 12px; border-radius: 50%; display: inline-block;
                 box-shadow: 0 0 5px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2);
             }}
             .lbl {{ color: #c9d1d9; font-size: 13px; }}
             
-            /* Stile quando disattivato */
+            /* Style when unchecked */
             .lg-item input:not(:checked) ~ .dot {{ opacity: 0.3; background: #333 !important; }}
             .lg-item input:not(:checked) ~ .lbl {{ opacity: 0.5; text-decoration: line-through; }}
 
@@ -411,11 +411,11 @@ class FaceAnalyzer:
         </div>
 
         <script>
-            // Mappa i nomi dei gruppi agli indici delle tracce di Plotly
+            // Map group names to Plotly trace indices
             var groupMap = {{}};
             var plot = document.querySelector('.js-plotly-plot');
             
-            // Aspetta che Plotly carichi
+            // Wait for Plotly to load
             if(plot && plot.data) {{
                 plot.data.forEach(function(trace, i) {{
                     var g = trace.legendgroup; 
@@ -445,10 +445,10 @@ class FaceAnalyzer:
                 var inputs = document.querySelectorAll('.lg-item input');
                 soloIndex = (soloIndex + 1) % inputs.length;
                 
-                // Spegni tutto
+                // Turn everything off
                 setAll(false);
                 
-                // Accendi solo il target
+                // Turn on only the target
                 inputs[soloIndex].checked = true;
                 var group = inputs[soloIndex].parentElement.getAttribute('data-group');
                 toggleGroup(group, true);
@@ -468,8 +468,8 @@ if __name__ == "__main__":
         df = analyzer.process_dataset()
         df_rich = analyzer.generate_tsne(df)
         analyzer.create_dashboard(df_rich)
-        print(f"\n✅ DONE! Apri il file: {OUTPUT_HTML}")
+        print(f"\n✅ DONE! Open the file: {OUTPUT_HTML}")
     except Exception as e:
-        print(f"\n❌ ERRORE: {e}")
+        print(f"\n❌ ERROR: {e}")
         import traceback
         traceback.print_exc()
