@@ -1,0 +1,20 @@
+# MirrorMetrics - Dependencies
+# ==============================
+# Core face analysis
+insightface>=0.7.3
+
+# GPU inference (requires CUDA toolkit installed on your system).
+# If you don't have a CUDA-capable GPU, replace with: onnxruntime
+onnxruntime-gpu
+
+# Image processing
+opencv-python>=4.7
+
+# Data & visualization
+numpy>=1.23
+pandas>=1.5
+plotly>=5.13
+tqdm>=4.64
+
+# Dimensionality reduction (t-SNE)
+scikit-learn>=1.2

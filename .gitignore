@@ -1,0 +1,48 @@
+# ========================================
+# MirrorMetrics .gitignore
+# ========================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# --- Virtual Environments ---
+venv/
+env/
+.env
+.venv/
+.idx/
+
+# --- User Data (NEVER commit these) ---
+Reference_Images/*
+Lora_Candidates/*
+!Reference_Images/.gitkeep
+!Lora_Candidates/.gitkeep
+
+# --- Generated Output ---
+*.html
+*.csv
+Debug_Imgs_*/
+
+# --- Backups ---
+BKP/
+
+# --- IDE / Editor ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- OS Files ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Model Cache ---
+*.onnx
