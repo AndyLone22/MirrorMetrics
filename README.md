@@ -5,6 +5,18 @@
 
 **MirrorMetrics** is a scientific benchmarking tool for evaluating **Face LoRAs** (Stable Diffusion fine-tuned models). It uses [InsightFace](https://github.com/deepinsight/insightface) (ArcFace) to perform local biometric analysis and generates a rich, interactive **Plotly** dashboard — all running entirely on your machine.
 
+**In two quick and easy words** 
+You put the dataset you used to train your LoRA in the Reference_Images folder and the generated images in the Lora_Candidates folder (Create one folder for each LoRA you want to compare. The name of the folder will be used as the name of the LoRA in the dashboard.). 
+
+You can have more LoRAs from the same training, maybe with different settings, or different steps, for example. Or you could have LoRA trained for entirely different models, that's fine too. 
+
+Then you run the script and it will generate a dashboard with all the metrics.
+The way I use it the most at the moment is:
+-compare the plots for the dataset, to see if I have some outliers that can skew the results.
+-compare the plots for the LoRAs, to see which one is the most consistent with the dataset, especially graph one which shows the general similarity score of the various images compared to the median of the dataset.
+-look at the plots 5 and 6 to see if the LoRA is good at generating the face in different angles and how much does it tend to to so (of course mind the prompts you're using, if you specifically tell it to generate a right profile image of course you'll have a bunch of dots on the right side of the graph.)
+
+
 > _"How consistent is the identity your LoRA generates?"_ — MirrorMetrics answers this question with data.
 
 ---
