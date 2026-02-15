@@ -12,9 +12,10 @@ You can have more LoRAs from the same training, maybe with different settings, o
 
 Then you run the script and it will generate a dashboard with all the metrics.
 The way I use it the most at the moment is:
--compare the plots for the dataset, to see if I have some outliers that can skew the results.
--compare the plots for the LoRAs, to see which one is the most consistent with the dataset, especially graph one which shows the general similarity score of the various images compared to the median of the dataset.
--look at the plots 5 and 6 to see if the LoRA is good at generating the face in different angles and how much does it tend to to so (of course mind the prompts you're using, if you specifically tell it to generate a right profile image of course you'll have a bunch of dots on the right side of the graph.)
+
+- Compare the plots for the dataset, to see if I have some outliers that can skew the results.
+- Compare the plots for the LoRAs, to see which one is the most consistent with the dataset, especially graph one which shows the general similarity score of the various images compared to the median of the dataset.
+- Look at the plots 5 and 6 to see if the LoRA is good at generating the face in different angles and how much does it tend to do so (of course mind the prompts you're using, if you specifically tell it to generate a right profile image of course you'll have a bunch of dots on the right side of the graph).
 
 
 > _"How consistent is the identity your LoRA generates?"_ — MirrorMetrics answers this question with data.
