@@ -194,6 +194,7 @@ Yes! You can run the tool pointing only to your Dataset folder to analyze the Pu
 
 ### How do I measure Flexibility (Creativity)?
 Look at the Face Ratio and Pose Variety charts. If the Face Ratio is a flat line and Pose Variety is clustered at the center, the model is just "photocopying" the data (Low Creativity). If the charts show wide variance (like a violin shape) and scattered dots, the model understands the 3D structure well enough to generate new expressions and angles (High Flexibility). Of course all this needs to have a good set of produced images to evaluate with different poses, angles, positions, backgrounds etc...
+
 ---
 
 ## 📄 License
