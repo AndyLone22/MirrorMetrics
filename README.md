@@ -5,6 +5,14 @@
 
 **MirrorMetrics** is a scientific benchmarking tool for evaluating **Face LoRAs** (Stable Diffusion fine-tuned models). It uses [InsightFace](https://github.com/deepinsight/insightface) (ArcFace) to perform local biometric analysis and generates a rich, interactive **Plotly** dashboard — all running entirely on your machine.
 
+## Why use this tool? (The Problem)
+Training a LoRA often feels like guessing. You might ask:
+* **How do I know if my LoRA is overtrained?**
+* **Why does my character look rigid?**
+* **Is my dataset consistent?**
+
+MirrorMetrics solves this by measuring **Identity Consistency**, **Face Geometry**, and **Flexibility** mathematically.
+
 **In two quick and easy words** 
 
 You put the dataset you used to train your LoRA in the Reference_Images folder and the generated images in the Lora_Candidates folder (Create one folder for each LoRA you want to compare. The name of the folder will be used as the name of the LoRA in the dashboard.). 
@@ -75,7 +83,10 @@ pip install -r requirements.txt
 
 ## 📖 Usage
 
-### 1. Prepare your folders
+### 1. Prepare your folders.
+It's imperative to use good structured datasets for the Analysis: 
+The reference images should be the ones used in the dataset for Training the LoRAs.
+Then with those LoRAs, produce at least 10 different prompts, in batches of 3 per prompts, to have a good variety, and mind to have differentiated prompts that reach for many positions, angles, situations... If you only produce images of portraits, of course the variance will be flat, but that won't mean that the model is not variable, just that the dataset was created poorly. I suggest you decide 10 standard prompts and always use those, so that you'll learn better how to read the results with experience.
 
 ```
 MirrorMetrics/
@@ -159,6 +170,30 @@ You can customize these variables at the top of `mirror_metrics.py`:
 | `PATH_CANDIDATES_ROOT` | `Lora_Candidates` | Path to LoRA candidates root folder |
 | `EXTENSIONS` | `jpg, jpeg, png, webp, bmp` | Supported image formats |
 
+---
+
+## FAQ
+
+### How do I check if my LoRA is overtrained?
+Look at the **Face Similarity** chart. If the score is extremely high (>0.85) on all images and the **Face Ratio** variance is near zero, your model is likely overfitted (memorizing pixels instead of concepts).
+
+### Can I use this for Flux or SDXL?
+Yes. MirrorMetrics works on the *output images*, so it is compatible with **Stable Diffusion 1.5, SDXL, Pony, Flux, QWEN, Z-Image and any other model of any kind**.
+
+### How to evaluate dataset quality?
+Use the "Reference" box in the charts. If the purple box is very tall or has outliers, check those images to see why they give a high difference evaluation to the mean of the rest of the images, then discard them if you feel it's best.
+
+### Why does the Age Distribution vary so much?
+This usually indicates inconsistent skin texture in your dataset. The biometric engine uses high-frequency details (pores, wrinkles, skin smoothing) to estimate age. If you mixed "soft" lighting images with "harsh" realistic photos, the tool might interpret the texture difference as an age difference.
+
+### Why does Detection Confidence drop on good images?
+This often happens with extreme angles (e.g. looking back over the shoulder, steep profiles). The detector expects a standard facial geometry, so perspective compression can lower the confidence score even if the anatomy is correct. Low confidence on a profile shot is acceptable; low confidence on a front-facing shot means your model is broken, so interpretation of the data is always needed!
+
+### Can I use this tool before training?
+Yes! You can run the tool pointing only to your Dataset folder to analyze the Purple Box (Reference). If the box is very tall or has dots floating far below it, you have "poison" images (outliers) in your dataset. Removing them before training could save you time and GPU hours, but it's data: not a suggestion so you always must interpret the data before deciding how to act.
+
+### How do I measure Flexibility (Creativity)?
+Look at the Face Ratio and Pose Variety charts. If the Face Ratio is a flat line and Pose Variety is clustered at the center, the model is just "photocopying" the data (Low Creativity). If the charts show wide variance (like a violin shape) and scattered dots, the model understands the 3D structure well enough to generate new expressions and angles (High Flexibility). Of course all this needs to have a good set of produced images to evaluate with different poses, angles, positions, backgrounds etc...
 ---
 
 ## 📄 License
