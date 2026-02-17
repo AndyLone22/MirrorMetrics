@@ -38,9 +38,12 @@ The way I use it the most at the moment is:
 | 🧬 **Biometric Similarity** | Cosine similarity between face embeddings and a reference centroid |
 | 🔄 **Leave-One-Out (LOO)** | Robust reference scoring that excludes each image from its own centroid calculation — great for cleaning noisy datasets |
 | 📊 **Interactive Plotly Dashboard** | 7-panel dark-themed HTML dashboard with floating control panel |
+| 👯 **Copycat Detector** | Standalone HTML report pairing each generated image with its nearest reference neighbor — instantly spot memorization vs. generalization |
+| 🕳️ **Black Hole Ranking** | Ranked list of reference images by how many generated images point to them — find dominant training samples |
 | 🎯 **Pose Analysis** | Yaw / Pitch scatter plots to evaluate identity stability across head orientations |
 | 🗺️ **t-SNE Identity Map** | 2D projection of face embeddings to visualize identity clusters |
 | 👤 **Age Detection** | Per-image age estimation via deep learning |
+| 🔄 **Close-Up Rescue** | Automatic padding retry for close-up faces that fill the entire frame (InsightFace workaround) |
 | 🔒 **Privacy-Focused** | Everything runs locally — no images are ever uploaded |
 
 ---
@@ -121,12 +124,13 @@ python mirror_metrics.py
 
 ### 3. View the results
 
-The script generates two output files in the project root:
+The script generates three output files in the project root:
 
 | File | Description |
 |---|---|
 | `Dashboard_<timestamp>.html` | Interactive Plotly dashboard — open in any browser |
-| `Data_<timestamp>.csv` | Raw data export for further analysis |
+| `CopycatReport_<timestamp>.html` | Nearest-neighbor visualizer — see which reference image each generation resembles most |
+| `Data_<timestamp>.csv` | Raw data export for further analysis (includes failed detections) |
 
 ---
 
@@ -143,6 +147,25 @@ The generated dashboard contains **7 analysis panels**:
 7. **Identity Map** — t-SNE 2D projection of face embeddings
 
 A **floating control panel** lets you toggle individual groups on/off or cycle through them in solo mode.
+
+---
+
+## 👯 Copycat Detector
+
+The Copycat Detector is a standalone HTML report that answers: _"Is my model actually learning the concept, or is it just memorizing a specific training image?"_
+
+For each **generated image**, it finds the **nearest reference image** (by cosine similarity on ArcFace embeddings) and displays them side-by-side in a visual grid.
+
+### What it shows
+
+- **Card grid** — Generated image (left) paired with its closest reference match (right)
+- **Color-coded similarity** — 🟢 OK (0.50–0.70) · 🟡 Watch Out (0.70–0.85) · 🔴 Danger Zone (>0.85) · ⚪ LOW sim (<0.50)
+- **Failed detections** — Images where no face was found are shown with a "⚠ Failed to recognize face" label
+- **Black Hole Ranking** — All reference images ranked by how many generated images point to them (most → least). If many generated images converge on the same reference, that training sample may be dominating the model
+- **Sort & Filter** — JS controls to sort by similarity or group, and filter by LoRA
+
+> [!TIP]
+> If you see 10 different generated images all pointing to the same reference photo, you've found a **"black hole"** in your dataset — an image so dominant it's pulling everything toward it. Consider removing or de-emphasizing it in your training set.
 
 ---
 
@@ -188,6 +211,9 @@ This usually indicates inconsistent skin texture in your dataset. The biometric 
 
 ### Why does Detection Confidence drop on good images?
 This often happens with extreme angles (e.g. looking back over the shoulder, steep profiles). The detector expects a standard facial geometry, so perspective compression can lower the confidence score even if the anatomy is correct. Low confidence on a profile shot is acceptable; low confidence on a front-facing shot means your model is broken, so interpretation of the data is always needed!
+
+### Why does face detection fail on close-up portraits?
+InsightFace sometimes struggles when a face fills the entire frame (extreme close-ups). MirrorMetrics includes a **Close-Up Rescue** mechanism: if the first detection attempt fails, it automatically adds black padding around the image to simulate a "zoom out" and retries. You'll see a `🔄 Rescued via padding` message in the terminal when this kicks in. If it still fails, the image is marked as "Failed" and shown in both the CSV and the Copycat Report.
 
 ### Can I use this tool before training?
 Yes! You can run the tool pointing only to your Dataset folder to analyze the Purple Box (Reference). If the box is very tall or has dots floating far below it, you have "poison" images (outliers) in your dataset. Removing them before training could save you time and GPU hours, but it's data: not a suggestion so you always must interpret the data before deciding how to act.
