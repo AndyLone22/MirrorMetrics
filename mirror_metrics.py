@@ -57,6 +57,7 @@ EXTENSIONS = ['*.jpg', '*.jpeg', '*.png', '*.webp', '*.bmp']
 TIMESTAMP = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 OUTPUT_HTML = f"Dashboard_{TIMESTAMP}.html"
 OUTPUT_CSV = f"Data_{TIMESTAMP}.csv"
+OUTPUT_COPYCAT = f"CopycatReport_{TIMESTAMP}.html"
 
 # ==========================================
 # END CONFIGURATION
@@ -75,6 +76,23 @@ class FaceAnalyzer:
         if img is None: return None
         
         faces = self.app.get(img)
+
+        # Rescue Protocol: if no face found, pad the image to handle close-ups
+        # where the face fills the entire frame (InsightFace struggles with these)
+        if len(faces) == 0:
+            h, w = img.shape[:2]
+            pad = int(max(h, w) * 0.4)  # 40% padding on each side
+            padded = cv2.copyMakeBorder(img, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=(0, 0, 0))
+            faces = self.app.get(padded)
+            if len(faces) > 0:
+                print(f"\n  🔄 Rescued via padding: {os.path.basename(img_path)}")
+                # Adjust bounding box back to original image coordinates
+                for face in faces:
+                    face.bbox[0] -= pad
+                    face.bbox[1] -= pad
+                    face.bbox[2] -= pad
+                    face.bbox[3] -= pad
+
         if len(faces) == 0: return None
         
         face = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
@@ -179,24 +197,33 @@ class FaceAnalyzer:
                 files.extend(glob.glob(os.path.join(folder, ext)))
                 
             for f in tqdm(files, desc=lora_name):
-                data = self.analyze_image(f)
                 filename = os.path.basename(f)
-                
-                if data:
-                    # For LoRA candidates we use the full reference centroid
-                    sim = float(np.dot(data['embedding'], centroid_full))
+                try:
+                    data = self.analyze_image(f)
                     
-                    dataset_data.append({
-                        'Type': 'Generated', 'Group': lora_name,
-                        'Filename': filename,
-                        'Similarity': sim,
-                        'Age': data['age'],
-                        'Yaw': data['yaw'], 'Pitch': data['pitch'], 'Roll': data['roll'],
-                        'DetScore': data['det_score'],
-                        'AspectRatio': data['aspect_ratio'],
-                        'Embedding': data['embedding']
-                    })
-                else:
+                    if data:
+                        # For LoRA candidates we use the full reference centroid
+                        sim = float(np.dot(data['embedding'], centroid_full))
+                        
+                        dataset_data.append({
+                            'Type': 'Generated', 'Group': lora_name,
+                            'Filename': filename,
+                            'Similarity': sim,
+                            'Age': data['age'],
+                            'Yaw': data['yaw'], 'Pitch': data['pitch'], 'Roll': data['roll'],
+                            'DetScore': data['det_score'],
+                            'AspectRatio': data['aspect_ratio'],
+                            'Embedding': data['embedding']
+                        })
+                    else:
+                        print(f"\n  ⚠ No face detected: {filename}")
+                        dataset_data.append({
+                            'Type': 'Failed', 'Group': lora_name, 'Filename': filename,
+                            'Similarity': 0, 'Age': 0,
+                            'Yaw': 0, 'Pitch': 0, 'Roll': 0, 'DetScore': 0, 'AspectRatio': 0, 'Embedding': None
+                        })
+                except Exception as ex:
+                    print(f"\n  ❌ Error processing {filename}: {ex}")
                     dataset_data.append({
                         'Type': 'Failed', 'Group': lora_name, 'Filename': filename,
                         'Similarity': 0, 'Age': 0,
@@ -207,16 +234,19 @@ class FaceAnalyzer:
 
     def generate_tsne(self, df):
         print("\n>>> Computing t-SNE...")
-        valid_df = df[df['Embedding'].notnull()].copy()
+        valid_mask = df['Embedding'].notnull()
+        valid_df = df[valid_mask].copy()
         if len(valid_df) < 5: return df
         
         matrix = np.stack(valid_df['Embedding'].values)
         perplex = min(30, len(valid_df) - 1)
         tsne = TSNE(n_components=2, perplexity=perplex, random_state=42, init='pca', learning_rate='auto')
         projections = tsne.fit_transform(matrix)
-        valid_df['tsne_x'] = projections[:, 0]
-        valid_df['tsne_y'] = projections[:, 1]
-        return valid_df
+        # Merge t-SNE coordinates back into the full DataFrame (Failed rows get NaN)
+        result = df.copy()
+        result.loc[valid_mask, 'tsne_x'] = projections[:, 0]
+        result.loc[valid_mask, 'tsne_y'] = projections[:, 1]
+        return result
 
     def create_dashboard(self, df):
         print(f"\n>>> Generating Dashboard (IMAX Layout): {OUTPUT_HTML}")
@@ -352,7 +382,7 @@ class FaceAnalyzer:
         self.inject_floating_legend(OUTPUT_HTML, clean_df) 
         
         print(">>> Dashboard complete.")
-        clean_df.drop(columns=['Embedding', 'img_obj'], errors='ignore').to_csv(OUTPUT_CSV, index=False)
+        df.drop(columns=['Embedding', 'img_obj'], errors='ignore').to_csv(OUTPUT_CSV, index=False)
 
     def inject_custom_css(self, html_path):
         with open(html_path, "r", encoding="utf-8") as f:
@@ -495,13 +525,300 @@ class FaceAnalyzer:
         with open(html_path, "w", encoding="utf-8") as f:
             f.write(content)
 
+    def create_copycat_report(self, df):
+        """Generate a standalone HTML report pairing each Generated image
+        with its nearest Reference neighbor (by cosine similarity)."""
+        import base64
+
+        print(f"\n>>> Generating Copycat Report: {OUTPUT_COPYCAT}")
+
+        ref_rows = df[(df['Type'] == 'Reference') & df['Embedding'].notnull()].copy()
+        gen_rows = df[(df['Type'] == 'Generated') & df['Embedding'].notnull()].copy()
+        failed_rows = df[df['Type'] == 'Failed'].copy()
+
+        if ref_rows.empty or gen_rows.empty:
+            print("WARNING: Not enough data for Copycat Report (need both Reference and Generated images).")
+            return
+
+        ref_embeddings = np.stack(ref_rows['Embedding'].values)
+        ref_files = ref_rows['Filename'].values.tolist()
+        # Build full paths for reference images
+        ref_paths = [os.path.join(PATH_REFERENCE, fn) for fn in ref_files]
+
+        # --- Compute nearest neighbor for every generated image ---
+        pairs = []  # (gen_filename, gen_group, gen_path, ref_filename, ref_path, similarity)
+        failed_list = []  # images where face detection failed
+        hit_counter = {fn: 0 for fn in ref_files}  # count how often each ref is the NN
+
+        for _, row in gen_rows.iterrows():
+            gen_emb = row['Embedding']
+            sims = np.dot(ref_embeddings, gen_emb)  # cosine sim (embeddings are normed)
+            best_idx = int(np.argmax(sims))
+            best_sim = float(sims[best_idx])
+            best_ref_fn = ref_files[best_idx]
+            best_ref_path = ref_paths[best_idx]
+            hit_counter[best_ref_fn] += 1
+
+            # Resolve gen full path
+            gen_path = os.path.join(PATH_CANDIDATES_ROOT, row['Group'], row['Filename'])
+
+            pairs.append({
+                'gen_fn': row['Filename'],
+                'gen_group': row['Group'],
+                'gen_path': gen_path,
+                'ref_fn': best_ref_fn,
+                'ref_path': best_ref_path,
+                'sim': best_sim,
+            })
+
+        # Collect failed images
+        for _, row in failed_rows.iterrows():
+            gen_path = os.path.join(PATH_CANDIDATES_ROOT, row['Group'], row['Filename'])
+            failed_list.append({
+                'gen_fn': row['Filename'],
+                'gen_group': row['Group'],
+                'gen_path': gen_path,
+            })
+
+        # Sort pairs by similarity descending (most suspicious first)
+        pairs.sort(key=lambda p: p['sim'], reverse=True)
+
+        # --- Helper: image -> base64 data URI (resized thumbnail) ---
+        def img_to_b64(path, max_size=256):
+            img = cv2.imread(path)
+            if img is None:
+                return ""
+            h, w = img.shape[:2]
+            scale = max_size / max(h, w)
+            if scale < 1:
+                img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+            _, buf = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            return "data:image/jpeg;base64," + base64.b64encode(buf).decode('ascii')
+
+        # --- Helper: similarity -> color ---
+        def sim_color(s):
+            if s > 0.85:
+                return "#f85149"  # red
+            elif s > 0.70:
+                return "#d29922"  # orange
+            elif s > 0.50:
+                return "#3fb950"  # green
+            return "#8b949e"      # grey — low similarity
+
+        def sim_label(s):
+            if s > 0.85:
+                return f'{s:.3f} <span style="color:#f85149;font-weight:700">⚠ Danger Zone!</span>'
+            elif s > 0.70:
+                return f'{s:.3f} <span style="color:#d29922">⚡ Watch Out</span>'
+            elif s > 0.50:
+                return f'{s:.3f} <span style="color:#3fb950">✓ OK</span>'
+            return f'{s:.3f} <span style="color:#8b949e">↓ LOW sim</span>'
+
+        # --- Summary stats ---
+        sims_all = [p['sim'] for p in pairs]
+        avg_sim = np.mean(sims_all)
+        min_sim = np.min(sims_all)
+        max_sim = np.max(sims_all)
+        n_danger = sum(1 for s in sims_all if s > 0.85)
+        n_failed = len(failed_list)
+
+        # --- Build card HTML ---
+        cards_html = ""
+        for p in tqdm(pairs, desc="Building cards"):
+            gen_b64 = img_to_b64(p['gen_path'])
+            ref_b64 = img_to_b64(p['ref_path'])
+            border_col = sim_color(p['sim'])
+            label = sim_label(p['sim'])
+            cards_html += f'''
+            <div class="cc-card" data-sim="{p['sim']:.4f}" data-group="{p['gen_group']}" style="border-left:4px solid {border_col}">
+                <div class="cc-imgs">
+                    <div class="cc-side">
+                        <div class="cc-tag">Generated</div>
+                        <img src="{gen_b64}" alt="gen">
+                        <div class="cc-fn">{p['gen_fn']}</div>
+                        <div class="cc-grp">{p['gen_group']}</div>
+                    </div>
+                    <div class="cc-arrow">⟶</div>
+                    <div class="cc-side">
+                        <div class="cc-tag ref">Nearest Ref</div>
+                        <img src="{ref_b64}" alt="ref">
+                        <div class="cc-fn">{p['ref_fn']}</div>
+                    </div>
+                </div>
+                <div class="cc-sim">Similarity: {label}</div>
+            </div>'''
+
+        # --- Build failed cards ---
+        failed_html = ""
+        for fl in failed_list:
+            gen_b64 = img_to_b64(fl['gen_path'])
+            failed_html += f'''
+            <div class="cc-card cc-failed" style="border-left:4px solid #484f58">
+                <div class="cc-imgs">
+                    <div class="cc-side">
+                        <div class="cc-tag">Generated</div>
+                        <img src="{gen_b64}" alt="gen">
+                        <div class="cc-fn">{fl['gen_fn']}</div>
+                        <div class="cc-grp">{fl['gen_group']}</div>
+                    </div>
+                    <div class="cc-arrow" style="color:#484f58">✘</div>
+                    <div class="cc-side">
+                        <div class="cc-tag" style="color:#484f58">No Match</div>
+                        <div style="width:200px;height:200px;border-radius:8px;border:2px dashed #30363d;display:flex;align-items:center;justify-content:center;color:#484f58;font-size:40px;">❓</div>
+                    </div>
+                </div>
+                <div class="cc-sim" style="color:#f0883e">⚠ Failed to recognize face</div>
+            </div>'''
+
+        # --- Black Hole ranking (all refs, sorted by hits desc) ---
+        ranked_refs = sorted(hit_counter.items(), key=lambda x: x[1], reverse=True)
+        bh_html = ""
+        for rank, (ref_fn, hits) in tqdm(enumerate(ranked_refs, 1), total=len(ranked_refs), desc="Black Hole ranking"):
+            ref_path = os.path.join(PATH_REFERENCE, ref_fn)
+            ref_b64 = img_to_b64(ref_path, max_size=128)
+            bar_w = min(hits / max(1, ranked_refs[0][1]) * 100, 100)
+            danger_cls = ' bh-danger' if hits >= 3 else ''
+            bh_html += f'''
+            <div class="bh-row{danger_cls}">
+                <span class="bh-rank">#{rank}</span>
+                <img src="{ref_b64}" class="bh-thumb" alt="ref">
+                <div class="bh-info">
+                    <div class="bh-fn">{ref_fn}</div>
+                    <div class="bh-bar-bg"><div class="bh-bar" style="width:{bar_w}%"></div></div>
+                </div>
+                <span class="bh-count">{hits}</span>
+            </div>'''
+
+        # --- Assemble full HTML ---
+        html = f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Copycat Detector — {TIMESTAMP}</title>
+<style>
+  *, *::before, *::after {{ box-sizing: border-box; }}
+  html, body {{ margin:0; padding:0; background:#0d1117; color:#e6edf3; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }}
+  .wrap {{ max-width:1200px; margin:0 auto; padding:30px 20px; }}
+  h1 {{ font-size:28px; margin-bottom:5px; }}
+  h1 span {{ font-size:16px; color:#8b949e; font-weight:400; }}
+  .stats {{ display:flex; gap:20px; flex-wrap:wrap; margin:20px 0 30px; }}
+  .stat {{ background:#161b22; border:1px solid #30363d; border-radius:8px; padding:14px 20px; min-width:140px; }}
+  .stat .val {{ font-size:26px; font-weight:700; }}
+  .stat .lbl {{ font-size:12px; color:#8b949e; margin-top:4px; }}
+  .controls {{ display:flex; gap:12px; margin-bottom:24px; flex-wrap:wrap; align-items:center; }}
+  .controls select, .controls button {{ background:#21262d; color:#c9d1d9; border:1px solid #30363d; padding:8px 14px; border-radius:6px; cursor:pointer; font-size:13px; }}
+  .controls select:hover, .controls button:hover {{ background:#30363d; color:#fff; }}
+  .grid {{ display:flex; flex-direction:column; gap:14px; }}
+  .cc-card {{ background:#161b22; border:1px solid #30363d; border-radius:10px; padding:16px; transition: transform .15s, box-shadow .15s; }}
+  .cc-card:hover {{ transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,0,0,.4); }}
+  .cc-imgs {{ display:flex; align-items:center; gap:16px; justify-content:center; flex-wrap:wrap; }}
+  .cc-side {{ text-align:center; }}
+  .cc-side img {{ max-width:200px; max-height:260px; object-fit:contain; border-radius:8px; border:2px solid #30363d; }}
+  .cc-tag {{ font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#8b949e; margin-bottom:6px; }}
+  .cc-tag.ref {{ color:#58a6ff; }}
+  .cc-fn {{ font-size:12px; color:#8b949e; margin-top:6px; word-break:break-all; max-width:200px; }}
+  .cc-grp {{ font-size:11px; color:#58a6ff; margin-top:2px; }}
+  .cc-arrow {{ font-size:32px; color:#484f58; }}
+  .cc-sim {{ text-align:center; margin-top:12px; font-size:15px; }}
+  /* Black Hole section */
+  h2 {{ margin-top:50px; font-size:22px; border-bottom:1px solid #30363d; padding-bottom:10px; }}
+  .bh-row {{ display:flex; align-items:center; gap:14px; padding:10px 12px; border-radius:8px; transition:background .15s; }}
+  .bh-row:hover {{ background:#161b22; }}
+  .bh-danger {{ background:rgba(248,81,73,.08); }}
+  .bh-rank {{ font-size:16px; font-weight:700; color:#484f58; min-width:36px; text-align:right; }}
+  .bh-thumb {{ width:64px; height:64px; object-fit:cover; border-radius:6px; border:2px solid #30363d; }}
+  .bh-info {{ flex:1; }}
+  .bh-fn {{ font-size:13px; margin-bottom:4px; }}
+  .bh-bar-bg {{ height:8px; background:#21262d; border-radius:4px; overflow:hidden; }}
+  .bh-bar {{ height:100%; background:linear-gradient(90deg,#3fb950,#d29922,#f85149); border-radius:4px; transition:width .3s; }}
+  .bh-count {{ font-size:22px; font-weight:700; min-width:40px; text-align:center; }}
+  .bh-danger .bh-count {{ color:#f85149; }}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>👯 Copycat Detector <span>— {TIMESTAMP}</span></h1>
+  <div class="stats">
+    <div class="stat"><div class="val">{len(pairs)}</div><div class="lbl">Total Pairs</div></div>
+    <div class="stat"><div class="val" style="color:{sim_color(avg_sim)}">{avg_sim:.3f}</div><div class="lbl">Avg Similarity</div></div>
+    <div class="stat"><div class="val">{max_sim:.3f}</div><div class="lbl">Max Similarity</div></div>
+    <div class="stat"><div class="val">{min_sim:.3f}</div><div class="lbl">Min Similarity</div></div>
+    <div class="stat"><div class="val" style="color:#f85149">{n_danger}</div><div class="lbl">Danger Zone (>0.85)</div></div>
+    <div class="stat"><div class="val" style="color:#f0883e">{n_failed}</div><div class="lbl">Failed Detection</div></div>
+  </div>
+
+  <div class="controls">
+    <select id="sortSel" onchange="applySort()">
+      <option value="sim-desc">Sort: Similarity ↓</option>
+      <option value="sim-asc">Sort: Similarity ↑</option>
+      <option value="group">Sort: Group A-Z</option>
+    </select>
+    <select id="groupFilter" onchange="applyFilter()">
+      <option value="all">All Groups</option>
+    </select>
+    <button onclick="document.getElementById('sortSel').value='sim-desc';document.getElementById('groupFilter').value='all';applySort();applyFilter();">Reset</button>
+  </div>
+
+  <div class="grid" id="cardGrid">
+    {cards_html}
+  </div>
+
+  {failed_html}
+
+  <h2>🕳️ Black Hole Ranking</h2>
+  <p style="color:#8b949e;font-size:14px;">Which reference images attract the most generated outputs? Sorted most → least.</p>
+  {bh_html}
+</div>
+
+<script>
+(function(){{
+  // Populate group filter
+  var groups = new Set();
+  document.querySelectorAll('.cc-card').forEach(function(c){{ groups.add(c.dataset.group); }});
+  var sel = document.getElementById('groupFilter');
+  groups.forEach(function(g){{
+    var o = document.createElement('option'); o.value = g; o.textContent = g; sel.appendChild(o);
+  }});
+}})();
+
+function applySort(){{
+  var grid = document.getElementById('cardGrid');
+  var cards = Array.from(grid.children);
+  var mode = document.getElementById('sortSel').value;
+  cards.sort(function(a,b){{
+    if(mode==='sim-desc') return parseFloat(b.dataset.sim) - parseFloat(a.dataset.sim);
+    if(mode==='sim-asc') return parseFloat(a.dataset.sim) - parseFloat(b.dataset.sim);
+    return a.dataset.group.localeCompare(b.dataset.group);
+  }});
+  cards.forEach(function(c){{ grid.appendChild(c); }});
+}}
+
+function applyFilter(){{
+  var g = document.getElementById('groupFilter').value;
+  document.querySelectorAll('.cc-card').forEach(function(c){{
+    c.style.display = (g==='all' || c.dataset.group===g) ? '' : 'none';
+  }});
+}}
+</script>
+</body>
+</html>'''
+
+        with open(OUTPUT_COPYCAT, 'w', encoding='utf-8') as f:
+            f.write(html)
+
+        print(f">>> Copycat Report complete — {len(pairs)} pairs analyzed.")
+
 if __name__ == "__main__":
     try:
         analyzer = FaceAnalyzer()
         df = analyzer.process_dataset()
         df_rich = analyzer.generate_tsne(df)
         analyzer.create_dashboard(df_rich)
-        print(f"\n✅ DONE! Open the file: {OUTPUT_HTML}")
+        analyzer.create_copycat_report(df_rich)
+        print(f"\n✅ DONE! Open the files:")
+        print(f"   📊 Dashboard:  {OUTPUT_HTML}")
+        print(f"   👯 Copycat:    {OUTPUT_COPYCAT}")
     except Exception as e:
         print(f"\n❌ ERROR: {e}")
         import traceback
