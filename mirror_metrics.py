@@ -76,6 +76,23 @@ class FaceAnalyzer:
         if img is None: return None
         
         faces = self.app.get(img)
+
+        # Rescue Protocol: if no face found, pad the image to handle close-ups
+        # where the face fills the entire frame (InsightFace struggles with these)
+        if len(faces) == 0:
+            h, w = img.shape[:2]
+            pad = int(max(h, w) * 0.4)  # 40% padding on each side
+            padded = cv2.copyMakeBorder(img, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=(0, 0, 0))
+            faces = self.app.get(padded)
+            if len(faces) > 0:
+                print(f"\n  🔄 Rescued via padding: {os.path.basename(img_path)}")
+                # Adjust bounding box back to original image coordinates
+                for face in faces:
+                    face.bbox[0] -= pad
+                    face.bbox[1] -= pad
+                    face.bbox[2] -= pad
+                    face.bbox[3] -= pad
+
         if len(faces) == 0: return None
         
         face = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
@@ -607,7 +624,7 @@ class FaceAnalyzer:
 
         # --- Build card HTML ---
         cards_html = ""
-        for p in pairs:
+        for p in tqdm(pairs, desc="Building cards"):
             gen_b64 = img_to_b64(p['gen_path'])
             ref_b64 = img_to_b64(p['ref_path'])
             border_col = sim_color(p['sim'])
@@ -656,7 +673,7 @@ class FaceAnalyzer:
         # --- Black Hole ranking (all refs, sorted by hits desc) ---
         ranked_refs = sorted(hit_counter.items(), key=lambda x: x[1], reverse=True)
         bh_html = ""
-        for rank, (ref_fn, hits) in enumerate(ranked_refs, 1):
+        for rank, (ref_fn, hits) in tqdm(enumerate(ranked_refs, 1), total=len(ranked_refs), desc="Black Hole ranking"):
             ref_path = os.path.join(PATH_REFERENCE, ref_fn)
             ref_b64 = img_to_b64(ref_path, max_size=128)
             bar_w = min(hits / max(1, ranked_refs[0][1]) * 100, 100)
@@ -697,7 +714,7 @@ class FaceAnalyzer:
   .cc-card:hover {{ transform:translateY(-2px); box-shadow:0 6px 20px rgba(0,0,0,.4); }}
   .cc-imgs {{ display:flex; align-items:center; gap:16px; justify-content:center; flex-wrap:wrap; }}
   .cc-side {{ text-align:center; }}
-  .cc-side img {{ width:200px; height:200px; object-fit:cover; border-radius:8px; border:2px solid #30363d; }}
+  .cc-side img {{ max-width:200px; max-height:260px; object-fit:contain; border-radius:8px; border:2px solid #30363d; }}
   .cc-tag {{ font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#8b949e; margin-bottom:6px; }}
   .cc-tag.ref {{ color:#58a6ff; }}
   .cc-fn {{ font-size:12px; color:#8b949e; margin-top:6px; word-break:break-all; max-width:200px; }}
