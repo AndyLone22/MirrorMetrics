@@ -165,7 +165,7 @@ For each **generated image**, it finds the **nearest reference image** (by cosin
 - **Sort & Filter** — JS controls to sort by similarity or group, and filter by LoRA
 
 > [!TIP]
-> If you see 10 different generated images all pointing to the same reference photo, you've found a **"black hole"** in your dataset — an image so dominant it's pulling everything toward it. Consider removing or de-emphasizing it in your training set.
+> If you see 10 different generated images all pointing to the same reference photo, you've found a **"black hole"** in your dataset — an image so dominant it's pulling everything toward it. Make your considerations...
 
 ---
 

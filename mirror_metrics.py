@@ -240,12 +240,13 @@ class FaceAnalyzer:
         
         matrix = np.stack(valid_df['Embedding'].values)
         perplex = min(30, len(valid_df) - 1)
-        tsne = TSNE(n_components=2, perplexity=perplex, random_state=42, init='pca', learning_rate='auto')
+        tsne = TSNE(n_components=3, perplexity=perplex, random_state=42, init='pca', learning_rate='auto')
         projections = tsne.fit_transform(matrix)
         # Merge t-SNE coordinates back into the full DataFrame (Failed rows get NaN)
         result = df.copy()
         result.loc[valid_mask, 'tsne_x'] = projections[:, 0]
         result.loc[valid_mask, 'tsne_y'] = projections[:, 1]
+        result.loc[valid_mask, 'tsne_z'] = projections[:, 2]
         return result
 
     def create_dashboard(self, df):
@@ -255,16 +256,19 @@ class FaceAnalyzer:
         colors = px.colors.qualitative.Bold 
 
         fig = make_subplots(
-            rows=7, cols=1,
+            rows=6, cols=1,
             subplot_titles=(
                 "1. Face Similarity", "2. Age Distribution", "3. Face Ratio", 
                 "4. Detection Confidence (All points visible)", 
-                "5. Profile Stability", "6. Pose Variety", "7. Identity Map"
+                "5. Profile Stability", "6. Pose Variety"
             ),
-            specs=[[{"type": "xy"}]] * 7,
+            specs=[[{"type": "xy"}]] * 6,
             # Reduced spacing between charts (was 0.06)
-            vertical_spacing=0.025 
+            vertical_spacing=0.03 
         )
+
+        # Separate 3D figure for t-SNE Identity Map
+        fig3d = go.Figure()
 
         def get_style(grp_name):
             idx = list(groups).index(grp_name)
@@ -335,21 +339,22 @@ class FaceAnalyzer:
                 legendgroup=group, showlegend=False
             ), row=6, col=1)
 
-            # ROW 7: t-SNE
+            # t-SNE 3D (separate figure)
             if 'tsne_x' in subset.columns:
-                fig.add_trace(go.Scatter(
-                    x=subset['tsne_x'], y=subset['tsne_y'], mode='markers', name=group,
-                    marker=dict(size=12, color=color, line=dict(width=1, color='white')),
+                fig3d.add_trace(go.Scatter3d(
+                    x=subset['tsne_x'], y=subset['tsne_y'], z=subset['tsne_z'],
+                    mode='markers', name=group,
+                    marker=dict(size=5, color=color, line=dict(width=0.5, color='white')),
                     text=subset['Filename'], hovertemplate="<b>%{text}</b>",
-                    legendgroup=group, showlegend=False
-                ), row=7, col=1)
+                    legendgroup=group, showlegend=True
+                ))
 
         fig.add_hline(y=0.6, line_dash="dash", line_color="#58a6ff", row=1, col=1)
 
         fig.update_layout(
             title_text=f"🔬 Biometric Analysis (IMAX) - {TIMESTAMP}",
             # Increased total height
-            height=6000, 
+            height=5200, 
             autosize=True,
             template="plotly_dark",
             paper_bgcolor="#0d1117",
@@ -373,10 +378,37 @@ class FaceAnalyzer:
         fig.update_yaxes(title_text="Sim", row=5, col=1)
         fig.update_xaxes(title_text="Yaw", row=6, col=1)
         fig.update_yaxes(title_text="Pitch", row=6, col=1)
-        fig.update_xaxes(title_text="Latent 1", row=7, col=1)
-        fig.update_yaxes(title_text="Latent 2", row=7, col=1)
 
+        # Configure the 3D t-SNE figure
+        fig3d.update_layout(
+            title_text="7. Identity Map (3D t-SNE)",
+            height=700,
+            template="plotly_dark",
+            paper_bgcolor="#0d1117",
+            font=dict(color="#e6edf3", size=15),
+            margin=dict(r=50, l=50, t=60, b=50),
+            scene=dict(
+                xaxis_title="Latent 1",
+                yaxis_title="Latent 2",
+                zaxis_title="Latent 3",
+                bgcolor="#161b22",
+                xaxis=dict(gridcolor=grid_clr, zerolinecolor=grid_clr, color="#e6edf3"),
+                yaxis=dict(gridcolor=grid_clr, zerolinecolor=grid_clr, color="#e6edf3"),
+                zaxis=dict(gridcolor=grid_clr, zerolinecolor=grid_clr, color="#e6edf3"),
+            ),
+            legend=dict(bgcolor="rgba(22,27,34,0.8)", bordercolor=grid_clr, borderwidth=1),
+        )
+
+        # Write main dashboard
         fig.write_html(OUTPUT_HTML)
+        
+        # Inject the 3D t-SNE chart into the same HTML file
+        tsne_3d_html = fig3d.to_html(full_html=False, include_plotlyjs=False)
+        with open(OUTPUT_HTML, "r", encoding="utf-8") as f:
+            content = f.read()
+        content = content.replace("</body>", f'\n<div style="max-width:100%;padding:0 50px;">{tsne_3d_html}</div>\n</body>')
+        with open(OUTPUT_HTML, "w", encoding="utf-8") as f:
+            f.write(content)
         
         self.inject_custom_css(OUTPUT_HTML)
         self.inject_floating_legend(OUTPUT_HTML, clean_df) 
