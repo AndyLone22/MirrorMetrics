@@ -45,6 +45,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
 
 # ==========================================
 # ### DASHBOARD CONFIGURATION ###
@@ -240,7 +241,12 @@ class FaceAnalyzer:
         
         matrix = np.stack(valid_df['Embedding'].values)
         perplex = min(30, len(valid_df) - 1)
-        tsne = TSNE(n_components=3, perplexity=perplex, random_state=42, init='pca', learning_rate='auto')
+        # Use PCA to compute a stable 3D initialization, then run t-SNE with cosine metric
+        # (init='pca' is not compatible with metric='cosine', so we do it manually)
+        pca_init = PCA(n_components=3, random_state=42).fit_transform(matrix)
+        # Rescale PCA init to small values (t-SNE expects ~1e-4 scale for stability)
+        pca_init = pca_init / (np.std(pca_init[:, 0]) * 1e4)
+        tsne = TSNE(n_components=3, perplexity=perplex, random_state=42, metric='cosine', init=pca_init, learning_rate='auto')
         projections = tsne.fit_transform(matrix)
         # Merge t-SNE coordinates back into the full DataFrame (Failed rows get NaN)
         result = df.copy()
